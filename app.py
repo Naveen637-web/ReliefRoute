@@ -2,66 +2,342 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-from data import get_camps, get_warehouses
-from scoring import add_priority_scores
+from data import camps, warehouses
+from scoring import calculate_priority
 from allocation import allocate_supplies
 from routing import find_route
 
 
 # ============================================================
-# CONFIG
+# PAGE CONFIG
 # ============================================================
 
 st.set_page_config(
-    page_title="ReliefRoute AI",
-    page_icon="🚑",
+    page_title="ReliefRoute | Operations Center",
+    page_icon="◆",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 
 # ============================================================
-# STYLE
+# PROFESSIONAL CSS
 # ============================================================
 
 st.markdown("""
 <style>
 
-[data-testid="stAppViewContainer"] {
-    background-color: #08111f;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
 }
 
-[data-testid="stSidebar"] {
-    background-color: #0d1b2a;
+.stApp {
+    background: #f4f6f8;
 }
 
-h1, h2, h3 {
-    color: #ffffff;
+/* Remove Streamlit top padding */
+.block-container {
+    padding-top: 1.5rem;
+    padding-bottom: 3rem;
+    max-width: 1500px;
 }
 
-p, label {
-    color: #d9e2ec;
+/* ---------------------------------------------------------
+   DEMO BANNER
+--------------------------------------------------------- */
+
+.demo-banner {
+    background: #fff4d6;
+    border: 1px solid #e7c76b;
+    color: #594700;
+    padding: 9px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    margin-bottom: 18px;
 }
 
-.metric-card {
-    background-color: #101f33;
-    padding: 20px;
-    border-radius: 12px;
-    border: 1px solid #243b53;
+.demo-banner span {
+    font-family: 'IBM Plex Mono', monospace;
+    margin-right: 12px;
 }
 
-.priority-critical {
-    background-color: #4a1515;
-    padding: 15px;
-    border-radius: 10px;
-    border-left: 5px solid #ff4b4b;
+/* ---------------------------------------------------------
+   HEADER
+--------------------------------------------------------- */
+
+.main-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 1px solid #d8dde3;
+    padding-bottom: 15px;
+    margin-bottom: 20px;
 }
 
-.priority-high {
-    background-color: #4a3515;
-    padding: 15px;
-    border-radius: 10px;
-    border-left: 5px solid #ffa500;
+.system-name {
+    font-size: 25px;
+    font-weight: 700;
+    color: #17212b;
+    letter-spacing: -0.5px;
+}
+
+.system-subtitle {
+    font-size: 12px;
+    color: #687581;
+    margin-top: 4px;
+}
+
+.system-status {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: #23613f;
+    background: #e9f5ee;
+    border: 1px solid #b9dcc7;
+    padding: 6px 10px;
+    border-radius: 3px;
+}
+
+/* ---------------------------------------------------------
+   SECTION HEADERS
+--------------------------------------------------------- */
+
+.section-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #17212b;
+    margin-top: 24px;
+    margin-bottom: 10px;
+}
+
+.section-description {
+    color: #687581;
+    font-size: 12px;
+    margin-top: -5px;
+    margin-bottom: 15px;
+}
+
+/* ---------------------------------------------------------
+   METRIC CARDS
+--------------------------------------------------------- */
+
+.metric {
+    background: white;
+    border: 1px solid #d8dde3;
+    border-radius: 5px;
+    padding: 15px 17px;
+    min-height: 95px;
+}
+
+.metric-label {
+    color: #687581;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-weight: 600;
+}
+
+.metric-value {
+    color: #17212b;
+    font-size: 27px;
+    font-weight: 700;
+    margin-top: 6px;
+}
+
+.metric-detail {
+    color: #7b8791;
+    font-size: 11px;
+    margin-top: 3px;
+}
+
+/* ---------------------------------------------------------
+   ALERTS
+--------------------------------------------------------- */
+
+.alert-critical {
+    background: #fff0ef;
+    border-left: 4px solid #b42318;
+    border-top: 1px solid #ead0cd;
+    border-right: 1px solid #ead0cd;
+    border-bottom: 1px solid #ead0cd;
+    padding: 12px 15px;
+    margin-bottom: 8px;
+}
+
+.alert-warning {
+    background: #fff8e7;
+    border-left: 4px solid #b7791f;
+    border-top: 1px solid #ead9b5;
+    border-right: 1px solid #ead9b5;
+    border-bottom: 1px solid #ead9b5;
+    padding: 12px 15px;
+    margin-bottom: 8px;
+}
+
+.alert-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #17212b;
+}
+
+.alert-text {
+    font-size: 12px;
+    color: #53616c;
+    margin-top: 3px;
+}
+
+/* ---------------------------------------------------------
+   STATUS BADGES
+--------------------------------------------------------- */
+
+.badge {
+    display: inline-block;
+    padding: 3px 7px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+.badge-critical {
+    color: #9e1b15;
+    background: #fde8e7;
+}
+
+.badge-high {
+    color: #875a00;
+    background: #fff0c9;
+}
+
+.badge-medium {
+    color: #315c86;
+    background: #e8f1fa;
+}
+
+.badge-low {
+    color: #3c654e;
+    background: #e8f3ec;
+}
+
+/* ---------------------------------------------------------
+   TABLES / PANELS
+--------------------------------------------------------- */
+
+.panel {
+    background: white;
+    border: 1px solid #d8dde3;
+    border-radius: 5px;
+    padding: 18px;
+    margin-bottom: 15px;
+}
+
+.panel-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #17212b;
+    margin-bottom: 12px;
+}
+
+.panel-subtitle {
+    font-size: 11px;
+    color: #71808b;
+    margin-bottom: 12px;
+}
+
+/* ---------------------------------------------------------
+   SIDEBAR
+--------------------------------------------------------- */
+
+section[data-testid="stSidebar"] {
+    background: #17212b;
+}
+
+section[data-testid="stSidebar"] * {
+    color: #e9eef2;
+}
+
+section[data-testid="stSidebar"] .stRadio label {
+    font-size: 13px;
+}
+
+.sidebar-logo {
+    font-size: 20px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 2px;
+}
+
+.sidebar-subtitle {
+    color: #9eabb5;
+    font-size: 11px;
+    margin-bottom: 25px;
+}
+
+.sidebar-divider {
+    border-top: 1px solid #34424d;
+    margin: 18px 0;
+}
+
+.sidebar-status {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: #aebbc4;
+    line-height: 1.8;
+}
+
+/* ---------------------------------------------------------
+   BUTTONS
+--------------------------------------------------------- */
+
+.stButton > button {
+    border-radius: 4px;
+    border: 1px solid #b8c1c8;
+    background: white;
+    color: #17212b;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.stButton > button:hover {
+    border-color: #3c617d;
+    color: #254b67;
+}
+
+/* Primary */
+button[kind="primary"] {
+    background: #244d69 !important;
+    border-color: #244d69 !important;
+    color: white !important;
+}
+
+/* ---------------------------------------------------------
+   INPUTS
+--------------------------------------------------------- */
+
+.stSelectbox > div,
+.stTextInput > div {
+    font-size: 12px;
+}
+
+/* ---------------------------------------------------------
+   FOOTER
+--------------------------------------------------------- */
+
+.footer {
+    border-top: 1px solid #d8dde3;
+    margin-top: 40px;
+    padding-top: 12px;
+    color: #7b8791;
+    font-size: 10px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.mono {
+    font-family: 'IBM Plex Mono', monospace;
 }
 
 </style>
@@ -69,169 +345,273 @@ p, label {
 
 
 # ============================================================
-# DATA
+# SESSION STATE
 # ============================================================
 
-camps = get_camps()
-warehouses = get_warehouses()
+if "approved" not in st.session_state:
+    st.session_state.approved = False
 
-scored_camps = add_priority_scores(camps)
+if "plan_generated" not in st.session_state:
+    st.session_state.plan_generated = False
+
+
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
+def priority_badge(level):
+
+    level = str(level).upper()
+
+    if level == "CRITICAL":
+        return '<span class="badge badge-critical">CRITICAL</span>'
+
+    if level == "HIGH":
+        return '<span class="badge badge-high">HIGH</span>'
+
+    if level == "MEDIUM":
+        return '<span class="badge badge-medium">MEDIUM</span>'
+
+    return '<span class="badge badge-low">LOW</span>'
+
+
+def get_priority(camp):
+
+    return calculate_priority(
+        camp["health_risk"],
+        camp["vulnerable"],
+        camp["time_without_aid"],
+        camp["isolation"]
+    )
 
 
 # ============================================================
 # SIDEBAR
 # ============================================================
 
-st.sidebar.title("🚑 ReliefRoute AI")
-
-st.sidebar.caption(
-    "Emergency relief decision-support prototype"
-)
-
-st.sidebar.divider()
-
-page = st.sidebar.radio(
-    "COMMAND CENTER",
-    [
-        "Dashboard",
-        "Field Reports",
-        "Priority Engine",
-        "Supply Allocation",
-        "Route Planner",
-        "Performance",
-        "Human Approval"
-    ]
-)
-
-st.sidebar.divider()
-
-st.sidebar.info(
-    "Prototype mode\n\n"
-    "Data shown here is simulated for demonstration."
-)
-
-
-# ============================================================
-# DASHBOARD
-# ============================================================
-
-if page == "Dashboard":
-
-    st.title("🚑 ReliefRoute AI")
-
-    st.subheader(
-        "Emergency Relief Command Center"
-    )
-
-    st.caption(
-        "Helping coordinators decide which camp gets what, "
-        "from where, and by which route."
-    )
-
-    st.divider()
-
-    # METRICS
-
-    col1, col2, col3, col4, col5 = st.columns(5)
-
-    critical = sum(
-        scored_camps["Priority Score"] >= 80
-    )
-
-    total_people = camps["People"].sum()
-
-    total_water = warehouses["Water"].sum()
-
-    total_food = warehouses["Food"].sum()
-
-    col1.metric(
-        "Relief Camps",
-        len(camps)
-    )
-
-    col2.metric(
-        "People Affected",
-        f"{total_people:,}"
-    )
-
-    col3.metric(
-        "Critical Camps",
-        critical
-    )
-
-    col4.metric(
-        "Water Available",
-        f"{total_water:,} L"
-    )
-
-    col5.metric(
-        "Food Available",
-        f"{total_food:,} kg"
-    )
-
-    st.divider()
-
-    # ALERT
-
-    highest = scored_camps.sort_values(
-        "Priority Score",
-        ascending=False
-    ).iloc[0]
+with st.sidebar:
 
     st.markdown(
-        f"""
-        <div class="priority-critical">
+        '<div class="sidebar-logo">RELIEFROUTE</div>',
+        unsafe_allow_html=True
+    )
 
-        🚨 <b>HIGHEST PRIORITY CAMP</b>
+    st.markdown(
+        '<div class="sidebar-subtitle">Humanitarian Logistics Operations</div>',
+        unsafe_allow_html=True
+    )
 
-        <br><br>
+    st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
 
-        <b>{highest['Camp']}</b>
+    page = st.radio(
+        "OPERATIONS",
+        [
+            "Operations Overview",
+            "Field Reports",
+            "Priority Assessment",
+            "Supply Allocation",
+            "Route Planning",
+            "Performance",
+            "Decision Approval"
+        ],
+        label_visibility="visible"
+    )
 
-        — Priority Score: <b>{highest['Priority Score']}</b>
+    st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
 
-        <br>
-
-        Health Risk: {highest['Health Risk']}/100 |
-        Vulnerability: {highest['Vulnerable']}/100 |
-        Time Without Aid: {highest['Time Without Aid']} hours |
-        Isolation: {highest['Isolation']}/100
-
+    st.markdown(
+        """
+        <div class="sidebar-status">
+        SYSTEM STATUS<br>
+        ● DATA ENGINE &nbsp;&nbsp; READY<br>
+        ● PRIORITY ENGINE &nbsp; READY<br>
+        ● ROUTE ENGINE &nbsp;&nbsp;&nbsp; READY<br>
+        ● APPROVAL GATE &nbsp;&nbsp; ACTIVE
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    st.divider()
 
-    # CHART
+# ============================================================
+# GLOBAL HEADER
+# ============================================================
 
-    st.subheader("Camp Priority")
+st.markdown(
+    """
+    <div class="demo-banner">
+        <span>DEMO • SIMULATION DATA</span>
+        This prototype is for demonstration only and is not connected to a live disaster-response operation.
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
-    chart_data = scored_camps.sort_values(
-        "Priority Score",
-        ascending=True
+st.markdown(
+    """
+    <div class="main-header">
+        <div>
+            <div class="system-name">ReliefRoute Operations Center</div>
+            <div class="system-subtitle">
+                Flood response coordination • Assam scenario • Initial 72-hour response window
+            </div>
+        </div>
+        <div class="system-status">
+            ● SYSTEM OPERATIONAL
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# OPERATIONS OVERVIEW
+# ============================================================
+
+if page == "Operations Overview":
+
+    st.markdown(
+        '<div class="section-title">Situation Overview</div>',
+        unsafe_allow_html=True
     )
 
-    fig = px.bar(
-        chart_data,
-        x="Priority Score",
-        y="Camp",
-        orientation="h",
-        text="Priority Score",
-        range_x=[0, 100]
+    st.markdown(
+        '<div class="section-description">Current simulated operational picture.</div>',
+        unsafe_allow_html=True
     )
 
-    fig.update_layout(
-        template="plotly_dark",
-        height=400,
-        xaxis_title="Priority Score",
-        yaxis_title=""
+    priorities = []
+
+    for camp in camps:
+        score, level = get_priority(camp)
+        priorities.append({
+            "Camp": camp["name"],
+            "Priority": round(score, 1),
+            "Level": level
+        })
+
+    priority_df = pd.DataFrame(priorities)
+
+    critical = len(priority_df[priority_df["Level"] == "CRITICAL"])
+    high = len(priority_df[priority_df["Level"] == "HIGH"])
+    total_people = sum(c["population"] for c in camps)
+    warehouses_count = len(warehouses)
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    with c1:
+        st.markdown(
+            f"""
+            <div class="metric">
+                <div class="metric-label">Affected Camps</div>
+                <div class="metric-value">{len(camps)}</div>
+                <div class="metric-detail">{total_people:,} people represented</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    with c2:
+        st.markdown(
+            f"""
+            <div class="metric">
+                <div class="metric-label">Critical Camps</div>
+                <div class="metric-value">{critical}</div>
+                <div class="metric-detail">Immediate attention required</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    with c3:
+        st.markdown(
+            f"""
+            <div class="metric">
+                <div class="metric-label">High Priority</div>
+                <div class="metric-value">{high}</div>
+                <div class="metric-detail">Elevated operational need</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    with c4:
+        st.markdown(
+            f"""
+            <div class="metric">
+                <div class="metric-label">Supply Points</div>
+                <div class="metric-value">{warehouses_count}</div>
+                <div class="metric-detail">Simulated warehouses</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.markdown(
+        '<div class="section-title">Operational Alerts</div>',
+        unsafe_allow_html=True
     )
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
+    critical_camps = priority_df[
+        priority_df["Level"] == "CRITICAL"
+    ]
+
+    if len(critical_camps) > 0:
+
+        for _, row in critical_camps.iterrows():
+
+            st.markdown(
+                f"""
+                <div class="alert-critical">
+                    <div class="alert-title">
+                        PRIORITY ALERT — {row["Camp"]}
+                    </div>
+                    <div class="alert-text">
+                        Priority score {row["Priority"]}/100.
+                        Camp requires immediate review by the coordinator.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+    else:
+
+        st.markdown(
+            """
+            <div class="alert-warning">
+                <div class="alert-title">NO CRITICAL CAMPS IDENTIFIED</div>
+                <div class="alert-text">
+                    Continue monitoring incoming field reports.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.markdown(
+        '<div class="section-title">Camp Priority Register</div>',
+        unsafe_allow_html=True
+    )
+
+    display_df = priority_df.sort_values(
+        "Priority",
+        ascending=False
+    ).reset_index(drop=True)
+
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Priority": st.column_config.ProgressColumn(
+                "Priority Score",
+                min_value=0,
+                max_value=100,
+                format="%.1f"
+            )
+        }
     )
 
 
@@ -241,191 +621,209 @@ if page == "Dashboard":
 
 elif page == "Field Reports":
 
-    st.title("📱 Field Reports")
-
-    st.caption(
-        "Incoming reports from volunteers and field coordinators"
+    st.markdown(
+        '<div class="section-title">Incoming Field Reports</div>',
+        unsafe_allow_html=True
     )
-
-    reports = [
-        (
-            "Camp 1",
-            "08:42",
-            "350 people. Water supplies decreasing. "
-            "No major health problems reported."
-        ),
-        (
-            "Camp 2",
-            "09:05",
-            "520 people. Water critically low. "
-            "Several vulnerable residents. "
-            "No delivery for 24 hours."
-        ),
-        (
-            "Camp 3",
-            "09:17",
-            "280 people. Food needed. "
-            "Road access currently available."
-        ),
-        (
-            "Camp 4",
-            "09:31",
-            "610 people. Critical food and water shortage. "
-            "Health concerns reported. Main road flooded. "
-            "No supplies for 23 hours."
-        ),
-        (
-            "Camp 5",
-            "09:48",
-            "430 people. Moderate water shortage. "
-            "Some vulnerable residents."
-        )
-    ]
-
-    for camp, time, message in reports:
-
-        with st.container(border=True):
-
-            col1, col2 = st.columns([1, 5])
-
-            with col1:
-                st.caption(time)
-                st.markdown(f"### {camp}")
-
-            with col2:
-                st.write(message)
-
-                if st.button(
-                    f"Analyze {camp}",
-                    key=f"analyze_{camp}"
-                ):
-
-                    camp_data = scored_camps[
-                        scored_camps["Camp"] == camp
-                    ].iloc[0]
-
-                    st.success(
-                        "Report converted into structured data."
-                    )
-
-                    st.json({
-                        "camp": camp,
-                        "people": int(camp_data["People"]),
-                        "health_risk": int(
-                            camp_data["Health Risk"]
-                        ),
-                        "vulnerable_population": int(
-                            camp_data["Vulnerable"]
-                        ),
-                        "hours_without_aid": int(
-                            camp_data["Time Without Aid"]
-                        ),
-                        "isolation": int(
-                            camp_data["Isolation"]
-                        )
-                    })
-
-
-# ============================================================
-# PRIORITY ENGINE
-# ============================================================
-
-elif page == "Priority Engine":
-
-    st.title("🧠 Explainable Priority Engine")
 
     st.markdown(
         """
-        ReliefRoute does not simply prioritize the camp that
-        sends the most messages.
-
-        The prototype combines four documented factors:
-        """
+        <div class="section-description">
+        Simulated reports representing the type of unstructured information received by relief coordinators.
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
-    c1, c2, c3, c4 = st.columns(4)
+    reports = [
+        {
+            "camp": "Camp 4",
+            "time": "08:14",
+            "source": "Field volunteer",
+            "message": "Around 610 people here. Water is running low. Several elderly people and children are sick. Road from the south is flooded."
+        },
+        {
+            "camp": "Camp 2",
+            "time": "08:37",
+            "source": "Local coordinator",
+            "message": "About 520 people. Medical supplies urgently needed. Water access is limited and the main road cannot be used."
+        },
+        {
+            "camp": "Camp 5",
+            "time": "09:05",
+            "source": "Volunteer network",
+            "message": "430 people currently sheltering here. Food available for a short period but water supplies are decreasing."
+        }
+    ]
 
-    c1.metric("Health Risk", "35%")
-    c2.metric("Vulnerability", "25%")
-    c3.metric("Time Without Aid", "25%")
-    c4.metric("Isolation", "15%")
+    for report in reports:
 
-    st.divider()
+        st.markdown(
+            f"""
+            <div class="panel">
+                <div class="panel-title">
+                    {report["camp"]}
+                    <span style="float:right;font-family:'IBM Plex Mono';font-size:10px;color:#71808b">
+                    {report["time"]} • {report["source"]}
+                    </span>
+                </div>
 
-    st.code(
-        """
-Priority Score =
-    0.35 × Health Risk
-  + 0.25 × Vulnerability
-  + 0.25 × Time Without Aid
-  + 0.15 × Isolation
-        """
+                <div style="
+                    background:#f7f8fa;
+                    border:1px solid #e1e5e8;
+                    padding:12px;
+                    border-radius:3px;
+                    font-size:12px;
+                    color:#45515b;
+                    line-height:1.6;
+                ">
+                    {report["message"]}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        if st.button(
+            f"Process report — {report['camp']}",
+            key=f"process_{report['camp']}"
+        ):
+
+            matching = next(
+                c for c in camps
+                if c["name"] == report["camp"]
+            )
+
+            score, level = get_priority(matching)
+
+            st.success("Report successfully converted into a structured operational record.")
+
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                st.metric("Population", matching["population"])
+
+            with col2:
+                st.metric("Health Risk", matching["health_risk"])
+
+            with col3:
+                st.metric("Vulnerable", matching["vulnerable"])
+
+            with col4:
+                st.metric("Priority", f"{score:.1f}")
+
+            st.markdown(
+                f"""
+                **Priority classification:** {level}
+
+                **Decision note:** The extracted information is used to support
+                the coordinator's assessment. The system does not automatically
+                authorize deployment.
+                """
+            )
+
+
+# ============================================================
+# PRIORITY ASSESSMENT
+# ============================================================
+
+elif page == "Priority Assessment":
+
+    st.markdown(
+        '<div class="section-title">Priority Assessment</div>',
+        unsafe_allow_html=True
     )
 
-    display = scored_camps[
-        [
-            "Camp",
-            "Health Risk",
-            "Vulnerable",
-            "Time Without Aid",
-            "Isolation",
-            "Priority Score",
-            "Priority Level"
-        ]
-    ].sort_values(
-        "Priority Score",
-        ascending=False
+    st.markdown(
+        """
+        <div class="section-description">
+        Transparent scoring model used to identify which camps require attention first.
+        </div>
+        """,
+        unsafe_allow_html=True
     )
+
+    st.markdown(
+        """
+        <div class="panel">
+
+        <div class="panel-title">Priority Model</div>
+
+        <div style="font-family:'IBM Plex Mono';font-size:13px;color:#33424e;line-height:2">
+
+        PRIORITY SCORE =
+
+        <b>0.35 × Health Risk</b>
+        +
+        <b>0.25 × Vulnerable Population</b>
+        +
+        <b>0.25 × Time Without Aid</b>
+        +
+        <b>0.15 × Isolation</b>
+
+        </div>
+
+        <div style="margin-top:10px;font-size:11px;color:#71808b">
+        Scores are illustrative for this prototype. Weighting should be validated with humanitarian-response experts before operational use.
+        </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    rows = []
+
+    for camp in camps:
+
+        score, level = get_priority(camp)
+
+        rows.append({
+            "Camp": camp["name"],
+            "Health Risk": camp["health_risk"],
+            "Vulnerable": camp["vulnerable"],
+            "Hours Without Aid": camp["time_without_aid"],
+            "Isolation": camp["isolation"],
+            "Priority Score": round(score, 1),
+            "Classification": level
+        })
+
+    df = pd.DataFrame(rows)
 
     st.dataframe(
-        display,
+        df.sort_values(
+            "Priority Score",
+            ascending=False
+        ),
         use_container_width=True,
         hide_index=True
     )
 
-    st.divider()
-
-    selected = st.selectbox(
-        "Inspect a camp",
-        scored_camps["Camp"]
-    )
-
-    camp = scored_camps[
-        scored_camps["Camp"] == selected
-    ].iloc[0]
-
-    st.subheader(
-        f"{selected} — Score {camp['Priority Score']}"
-    )
-
-    factors = pd.DataFrame({
-        "Factor": [
-            "Health Risk",
-            "Vulnerability",
-            "Time Without Aid",
-            "Isolation"
-        ],
-        "Score": [
-            camp["Health Risk"],
-            camp["Vulnerable"],
-            min(
-                camp["Time Without Aid"] / 24 * 100,
-                100
-            ),
-            camp["Isolation"]
-        ]
-    })
-
     fig = px.bar(
-        factors,
-        x="Factor",
-        y="Score",
-        range_y=[0, 100],
-        text="Score"
+        df.sort_values("Priority Score"),
+        x="Priority Score",
+        y="Camp",
+        orientation="h",
+        text="Priority Score"
     )
 
     fig.update_layout(
-        template="plotly_dark"
+        height=400,
+        margin=dict(l=10, r=10, t=20, b=20),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(
+            family="Inter",
+            size=12,
+            color="#34424e"
+        ),
+        xaxis=dict(
+            range=[0, 100],
+            gridcolor="#e5e9ed"
+        ),
+        yaxis=dict(
+            gridcolor="white"
+        )
     )
 
     st.plotly_chart(
@@ -440,121 +838,194 @@ Priority Score =
 
 elif page == "Supply Allocation":
 
-    st.title("📦 Supply Allocation")
+    st.markdown(
+        '<div class="section-title">Supply Allocation</div>',
+        unsafe_allow_html=True
+    )
 
-    st.caption(
-        "Allocate limited stock according to camp priority."
+    st.markdown(
+        """
+        <div class="section-description">
+        Proposed allocation of limited warehouse resources against camp requirements.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        """
+        <div class="alert-warning">
+            <div class="alert-title">DECISION SUPPORT ONLY</div>
+            <div class="alert-text">
+                Allocation recommendations require coordinator review before deployment.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
     if st.button(
-        "⚡ Generate Relief Plan",
+        "Generate Relief Allocation",
         type="primary"
     ):
 
         allocations, remaining = allocate_supplies(
-            scored_camps,
+            camps,
             warehouses
         )
 
-        allocation_df = pd.DataFrame(
-            allocations
+        st.session_state.plan_generated = True
+
+    if st.session_state.plan_generated:
+
+        allocations, remaining = allocate_supplies(
+            camps,
+            warehouses
         )
 
-        st.session_state["allocations"] = allocation_df
+        allocation_rows = []
 
-        st.success(
-            "Relief plan generated."
+        for item in allocations:
+
+            allocation_rows.append({
+                "Camp": item["camp"],
+                "Warehouse": item["warehouse"],
+                "Water": item.get("water", 0),
+                "Food": item.get("food", 0),
+                "Medical": item.get("medical", 0)
+            })
+
+        if allocation_rows:
+
+            st.markdown(
+                '<div class="section-title">Recommended Allocation Plan</div>',
+                unsafe_allow_html=True
+            )
+
+            st.dataframe(
+                pd.DataFrame(allocation_rows),
+                use_container_width=True,
+                hide_index=True
+            )
+
+        st.markdown(
+            '<div class="section-title">Remaining Warehouse Inventory</div>',
+            unsafe_allow_html=True
         )
 
-    if "allocations" in st.session_state:
+        remaining_rows = []
 
-        allocation_df = st.session_state[
-            "allocations"
-        ]
+        for warehouse, stock in remaining.items():
 
-        st.subheader("Recommended Deliveries")
+            remaining_rows.append({
+                "Warehouse": warehouse,
+                "Water": stock["water"],
+                "Food": stock["food"],
+                "Medical": stock["medical"]
+            })
 
         st.dataframe(
-            allocation_df,
+            pd.DataFrame(remaining_rows),
             use_container_width=True,
             hide_index=True
         )
 
-        st.divider()
-
-        st.subheader(
-            "⚠️ Human approval required"
-        )
-
-        st.warning(
-            "The system recommends an allocation. "
-            "It does not authorize deployment."
-        )
-
 
 # ============================================================
-# ROUTE PLANNER
+# ROUTE PLANNING
 # ============================================================
 
-elif page == "Route Planner":
+elif page == "Route Planning":
 
-    st.title("🚚 Flood-Aware Route Planner")
-
-    st.write(
-        "Routes marked as flooded are automatically excluded."
+    st.markdown(
+        '<div class="section-title">Route Planning</div>',
+        unsafe_allow_html=True
     )
 
-    col1, col2 = st.columns(2)
+    st.markdown(
+        """
+        <div class="section-description">
+        Flood-aware routing excludes roads marked as inaccessible in the simulation.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-    with col1:
+    selected_camp = st.selectbox(
+        "Destination camp",
+        [camp["name"] for camp in camps]
+    )
 
-        warehouse = st.selectbox(
-            "Warehouse",
-            warehouses["Warehouse"]
-        )
-
-    with col2:
-
-        camp = st.selectbox(
-            "Destination Camp",
-            camps["Camp"]
-        )
+    selected_warehouse = st.selectbox(
+        "Dispatch warehouse",
+        [warehouse["name"] for warehouse in warehouses]
+    )
 
     if st.button(
-        "🗺️ Calculate Safe Route",
+        "Calculate Safe Route",
         type="primary"
     ):
 
         route, distance = find_route(
-            warehouse,
-            camp
+            selected_warehouse,
+            selected_camp
         )
 
         if route:
 
-            st.success(
-                "SAFE ROUTE FOUND"
+            st.markdown(
+                """
+                <div class="alert-warning">
+                    <div class="alert-title">ROUTE RECOMMENDATION</div>
+                    <div class="alert-text">
+                        Route generated using the simulated road network.
+                        Confirm physical road conditions before deployment.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
             )
 
             st.markdown(
-                "### " +
-                " → ".join(route)
-            )
+                f"""
+                <div class="panel">
 
-            st.metric(
-                "Estimated Distance",
-                f"{distance} km"
-            )
+                    <div class="panel-title">Recommended Route</div>
 
-            st.info(
-                "Flooded roads were excluded "
-                "from route selection."
+                    <div style="
+                        font-family:'IBM Plex Mono';
+                        font-size:13px;
+                        color:#34424e;
+                        line-height:2;
+                    ">
+                        {" → ".join(route)}
+                    </div>
+
+                    <div style="
+                        margin-top:12px;
+                        font-size:11px;
+                        color:#71808b;
+                    ">
+                        Estimated route distance: <b>{distance}</b> km
+                    </div>
+
+                </div>
+                """,
+                unsafe_allow_html=True
             )
 
         else:
 
-            st.error(
-                "No safe route currently available."
+            st.markdown(
+                """
+                <div class="alert-critical">
+                    <div class="alert-title">NO SAFE ROUTE FOUND</div>
+                    <div class="alert-text">
+                        The simulated road network does not contain an available route.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
             )
 
 
@@ -564,21 +1035,27 @@ elif page == "Route Planner":
 
 elif page == "Performance":
 
-    st.title("📊 Strategy Comparison")
+    st.markdown(
+        '<div class="section-title">Evaluation Framework</div>',
+        unsafe_allow_html=True
+    )
 
-    st.caption(
-        "Illustrative prototype comparison — "
-        "replace these values with results from the "
-        "real simulation before presenting them as findings."
+    st.markdown(
+        """
+        <div class="section-description">
+        Example evaluation view. Values below are illustrative placeholders and are not experimental results.
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
     comparison = pd.DataFrame({
         "Strategy": [
             "First-Come-First-Served",
             "Nearest Warehouse",
-            "ReliefRoute AI"
+            "ReliefRoute"
         ],
-        "Critical Demand Fulfilled": [
+        "Critical Demand Fulfilled (%)": [
             62,
             71,
             91
@@ -588,7 +1065,7 @@ elif page == "Performance":
             5,
             2
         ],
-        "Average Response Time": [
+        "Average Response Time (h)": [
             8.2,
             6.4,
             4.1
@@ -601,101 +1078,155 @@ elif page == "Performance":
         hide_index=True
     )
 
-    st.divider()
-
-    fig = px.bar(
-        comparison,
-        x="Strategy",
-        y="Critical Demand Fulfilled",
-        text="Critical Demand Fulfilled",
-        range_y=[0, 100]
+    st.markdown(
+        '<div class="section-title">Recommended Evaluation Metrics</div>',
+        unsafe_allow_html=True
     )
 
-    fig.update_layout(
-        template="plotly_dark",
-        yaxis_title="% Critical Demand Fulfilled"
-    )
+    metrics = [
+        "Critical demand fulfilled",
+        "Time to first delivery",
+        "Number of camps below minimum supply",
+        "Vulnerable-population coverage",
+        "Total route distance",
+        "Unmet demand",
+        "Flooded-road violations"
+    ]
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+    for metric in metrics:
 
-    st.warning(
-        "These numbers are demonstration values. "
-        "Do not use them as experimental results."
-    )
+        st.markdown(
+            f"""
+            <div style="
+                background:white;
+                border:1px solid #d8dde3;
+                padding:9px 12px;
+                margin-bottom:5px;
+                font-size:12px;
+                color:#45515b;
+            ">
+                {metric}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
 
 # ============================================================
 # HUMAN APPROVAL
 # ============================================================
 
-elif page == "Human Approval":
+elif page == "Decision Approval":
 
-    st.title("👨‍💼 Human Coordinator")
-
-    st.warning(
-        "AI recommendation — awaiting human authorization"
-    )
-
-    st.divider()
-
-    st.subheader(
-        "Recommended Action"
+    st.markdown(
+        '<div class="section-title">Decision Approval</div>',
+        unsafe_allow_html=True
     )
 
     st.markdown(
         """
-        ### 🚨 Prioritize Camp 4
-
-        **Reason**
-
-        • High health risk  
-        • Large vulnerable population  
-        • 23 hours without aid  
-        • High isolation  
-        • Critical water requirement  
-        • Critical food requirement
-        """
+        <div class="section-description">
+        Human coordinator remains responsible for approving operational recommendations.
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
-    st.divider()
+    st.markdown(
+        """
+        <div class="panel">
+
+            <div class="panel-title">
+                Relief Deployment Recommendation
+            </div>
+
+            <div style="
+                display:grid;
+                grid-template-columns:1fr 1fr;
+                gap:10px;
+                font-size:12px;
+                color:#52616d;
+            ">
+
+                <div><b>Priority:</b> Critical camps first</div>
+                <div><b>Allocation:</b> Warehouse stock constrained</div>
+                <div><b>Routing:</b> Flooded roads excluded</div>
+                <div><b>Minimum supply:</b> Enforced in prototype</div>
+
+            </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        """
+        <div class="alert-warning">
+            <div class="alert-title">REVIEW REQUIRED</div>
+            <div class="alert-text">
+                Verify field reports, road conditions, inventory and safety conditions before approving deployment.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     col1, col2 = st.columns(2)
 
     with col1:
 
         if st.button(
-            "✅ APPROVE",
+            "Approve Recommendation",
             type="primary",
             use_container_width=True
         ):
 
-            st.success(
-                "Recommendation approved by coordinator."
-            )
-
-            st.session_state[
-                "approved"
-            ] = True
+            st.session_state.approved = True
 
     with col2:
 
         if st.button(
-            "❌ REJECT / MODIFY",
+            "Request Reassessment",
             use_container_width=True
         ):
 
+            st.session_state.approved = False
             st.warning(
-                "Recommendation returned for review."
+                "Recommendation returned for coordinator reassessment."
             )
 
-    if st.session_state.get(
-        "approved",
-        False
-    ):
+    if st.session_state.approved:
 
         st.success(
-            "🚚 Relief operation authorized."
+            "Recommendation marked APPROVED in the demonstration workflow."
         )
+
+        st.markdown(
+            """
+            <div style="
+                font-family:'IBM Plex Mono';
+                font-size:11px;
+                color:#52705d;
+                margin-top:8px;
+            ">
+            STATUS: APPROVED — DEMONSTRATION ONLY
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+# ============================================================
+# FOOTER
+# ============================================================
+
+st.markdown(
+    """
+    <div class="footer">
+        <div>RELIEFROUTE AI • HUMANITARIAN LOGISTICS PROTOTYPE</div>
+        <div class="mono">DEMO BUILD • NOT FOR LIVE DEPLOYMENT</div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
